@@ -121,9 +121,12 @@ export default class AehcScheduleStep extends LightningElement {
         if (value) {
             this.localWizardData = { ...value };
 
+            // Handle both cases: value is already schedule data OR value has a schedule property
+            const scheduleData = value.schedule || value;
+            
             this.localSchedule = {
                 ...this.localSchedule,
-                ...(value.schedule || {})
+                ...scheduleData
             };
 
             this.updateScheduleSummary();
