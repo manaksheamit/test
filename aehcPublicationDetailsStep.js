@@ -203,9 +203,12 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
     restorePreviousData() {
         if (!this.wizardData) return;
 
-        // Restore application
+        // Restore application with all related fields
         if (this.wizardData.application) {
             this.selectedApplication = this.wizardData.application;
+            this.applicationOwner = this.wizardData.application.owner || '';
+            this.dataClassification = this.wizardData.application.dataClassification || '';
+            this.searchKey = this.wizardData.application.name || '';
             this.hasSearched = true;
         }
 
@@ -218,8 +221,8 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
 
         // Restore schema
         if (this.wizardData.schema) {
-            this.schema = this.wizardData.schema.schemaName || '';
-            this.table = this.wizardData.schema.tableName || '';
+            this.schema = this.wizardData.schema.schema || '';
+            this.table = this.wizardData.schema.table || '';
             this.fields = this.wizardData.schema.fields || [];
             this.visibleFields = this.fields.slice(0, this.fieldPageSize);
             this.hasValidatedSchema = true;
