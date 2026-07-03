@@ -72,6 +72,10 @@
                 <lightning-layout-item size="6" class="slds-p-left_small">
                     <lightning-input label={labels.desc} value={pubDesc} maxlength={descLimit.data} onchange={handleDesc} required>
                     </lightning-input>
+
+                    <template if:true={publicationDescriptionError}>
+                        <div class="error-text">{publicationDescriptionError}</div>
+                    </template>
                 </lightning-layout-item>
             </lightning-layout>
             <lightning-layout>
@@ -80,6 +84,10 @@
                     <lightning-combobox label="Publication Type" value={publicationType}
                         options={publicationTypeOptions} onchange={handlePublicationTypeChange} required>
                     </lightning-combobox>
+
+                    <template if:true={publicationTypeError}>
+                        <div class="error-text">{publicationTypeError}</div>
+                    </template>
                 </lightning-layout-item>
 
             </lightning-layout>
@@ -91,11 +99,19 @@
                 <lightning-layout-item size="4" class="slds-p-right_small schema-field">
                     <lightning-input label={labels.schemaName} value={schema} onchange={handleSchema} required>
                     </lightning-input>
+
+                    <template if:true={schemaError}>
+                        <div class="error-text">{schemaError}</div>
+                    </template>
                 </lightning-layout-item>
 
                 <lightning-layout-item size="4" class="slds-p-left_small schema-field">
                     <lightning-input label={labels.tableName} value={table} onchange={handleTable} required>
                     </lightning-input>
+
+                    <template if:true={tableError}>
+                        <div class="error-text">{tableError}</div>
+                    </template>
                 </lightning-layout-item>
 
                 <lightning-layout-item size="2" class="slds-p-left_small schema-button">
