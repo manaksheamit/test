@@ -88,7 +88,12 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
     publicationType = '';
     isPicklistLoading = false;
     publicationValidationError = '';
+    publicationDescriptionError = '';
+    publicationTypeError = '';
+    schemaError = '';
+    tableError = '';
     isPublicationValid = true;
+    isDetailsValidated = false;
     applicationOwner = '';
     dataClassification = '';
     isEligible = false;
@@ -188,7 +193,7 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
                 !!this.schedule.cronExpression
             );
 
-        return !(this.isEligible && hasCore && hasSchedule);
+        return !(this.isEligible && hasCore && hasSchedule && this.isDetailsValidated);
     }
 
     connectedCallback() {
@@ -227,6 +232,7 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
             this.visibleFields = this.fields.slice(0, this.fieldPageSize);
             this.hasValidatedSchema = true;
             this.isEligible = true;
+            this.isDetailsValidated = true;
         }
 
         // Restore schedule
@@ -265,10 +271,6 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
         } finally {
             this.isPicklistLoading = false;
         }
-    }
-
-    handlePublicationTypeChange(event) {
-        this.publicationType = event.detail.value;
     }
 
     applyPicklistFallbacks() {
@@ -424,34 +426,83 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
         }
     }
 
-    handleDesc(event) { this.pubDesc = event.target.value; }
+    handleDesc(event) {
+        this.pubDesc = event.target.value;
+        this.publicationDescriptionError = '';
+        this.isDetailsValidated = false;
+    }
 
     handleName(event) {
         this.pubName = event.target.value?.trim();
+        this.publicationValidationError = '';
+        this.isDetailsValidated = false;
     }
 
     handleSchema(event) {
         this.schema = event.target.value?.trim();
+        this.schemaError = '';
+        this.isDetailsValidated = false;
         this.clearSchemaResults();
     }
 
     handleTable(event) {
         this.table = event.target.value?.trim();
+        this.tableError = '';
+        this.isDetailsValidated = false;
         this.clearSchemaResults();
     }
 
-    async handleValidate() {
-        try {
-            if (!this.schema || !this.table) {
-                this.applicationError = L_ERR_SCHEMA;
-                return;
-            }
-            if (!this.selectedApplication?.name) {
-                this.applicationError = L_ERR_APP_REQUIRED;
-                return;
-            }
+    handlePublicationTypeChange(event) {
+        this.publicationType = event.detail.value;
+        this.publicationTypeError = '';
+        this.isDetailsValidated = false;
+    }
 
-            this.applicationError = '';
+    clearValidationErrors() {
+        this.applicationError = '';
+        this.publicationValidationError = '';
+        this.publicationDescriptionError = '';
+        this.publicationTypeError = '';
+        this.schemaError = '';
+        this.tableError = '';
+    }
+
+    async handleValidate() {
+        this.clearValidationErrors();
+        this.isDetailsValidated = false;
+
+        const validationErrors = {};
+
+        if (!this.selectedApplication?.name) {
+            validationErrors.application = L_ERR_APP_REQUIRED;
+        }
+        if (!this.pubName) {
+            validationErrors.publicationName = 'Publication Name is required.';
+        }
+        if (!this.pubDesc) {
+            validationErrors.description = 'Publication Description is required.';
+        }
+        if (!this.publicationType) {
+            validationErrors.publicationType = 'Publication Type is required.';
+        }
+        if (!this.schema) {
+            validationErrors.schema = L_ERR_SCHEMA;
+        }
+        if (!this.table) {
+            validationErrors.table = L_ERR_SCHEMA;
+        }
+
+        if (Object.keys(validationErrors).length > 0) {
+            this.applicationError = validationErrors.application || '';
+            this.publicationValidationError = validationErrors.publicationName || '';
+            this.publicationDescriptionError = validationErrors.description || '';
+            this.publicationTypeError = validationErrors.publicationType || '';
+            this.schemaError = validationErrors.schema || '';
+            this.tableError = validationErrors.table || '';
+            return;
+        }
+
+        try {
             this.isSchemaLoading = true;
             this.hasValidatedSchema = true;
 
@@ -474,6 +525,25 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
             this.fieldDisplayLimit = this.fieldPageSize;
             this.visibleFields = this.fields.slice(0, this.fieldDisplayLimit);
 
+            if (!this.fields.length) {
+                this.schemaError = 'No fields available for selected schema/table.';
+                return;
+            }
+
+            const publicationResult = await validatePublicationBeforePreview({
+                applicationId: this.selectedApplication.id,
+                publicationName: this.pubName,
+                schemaName: this.schema,
+                tableName: this.table
+            });
+
+            if (publicationResult?.isValid === false || publicationResult?.isValid === 'false') {
+                this.publicationValidationError = publicationResult.message || 'Publication validation failed.';
+                return;
+            }
+
+            this.publicationValidationError = '';
+            this.isDetailsValidated = true;
             this.logTelemetry('validateSchemaSuccess', { totalFields: this.fields.length });
 
         } catch (e) {
@@ -481,7 +551,7 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
             this.fields = [];
             this.visibleFields = [];
             this.hasValidatedSchema = true;
-            this.applicationError = 'Unable to load schema fields. Please try again later.';
+            this.schemaError = 'Unable to load schema fields. Please try again later.';
         } finally {
             this.isSchemaLoading = false;
         }
@@ -509,15 +579,7 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
     async handleNext() {
         this.logTelemetry('nextClicked');
 
-        //  Step 1: Run duplicate validation
-        const isValid = await this.runValidationBeforeNext();
-
-        if (!isValid) {
-            return;
-
-        }
-
-        //  Step 2: Send data to parent
+        //  Send data to parent without re-running validation on Next click.
         this.dispatchEvent(
             new CustomEvent('stepdatachange', {
                 detail: {
@@ -545,39 +607,6 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
         this.dispatchEvent(new CustomEvent('next'));
     }
 
-    async runValidationBeforeNext() {
-        try {
-            //  Reset error
-            this.publicationValidationError = '';
-            this.isPublicationValid = true;
-
-            //  Basic validation guard
-            if (!this.selectedApplication?.id || !this.pubName || !this.schema || !this.table) {
-                return true; // handled by disableNext already
-            }
-
-            const result = await validatePublicationBeforePreview({
-                applicationId: this.selectedApplication.id,
-                publicationName: this.pubName,
-                schemaName: this.schema,
-                tableName: this.table
-            });
-            if (result?.isValid === false || result?.isValid === 'false') {
-                this.isPublicationValid = false;
-                this.publicationValidationError = result.message;
-                return false;
-            }
-
-            return true;
-
-        } catch (error) {
-            this.isPublicationValid = false;
-            this.publicationValidationError = L_ERR_VALIDATE + JSON.stringify(error);
-            this.logException(error, 'runValidationBeforeNext');
-            return false;
-        }
-    }
-
     //  Close: redirect to Data Publication Catalog
     handleClose() {
         this.logTelemetry('closeClicked');
@@ -599,6 +628,12 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
         this.publicationType = '';
         this.isEligible = false;
         this.applicationError = '';
+        this.publicationValidationError = '';
+        this.publicationDescriptionError = '';
+        this.publicationTypeError = '';
+        this.schemaError = '';
+        this.tableError = '';
+        this.isDetailsValidated = false;
 
         this.pubName = '';
         this.pubDesc = '';
@@ -635,6 +670,12 @@ export default class AehcPublicationDetailsStep extends NavigationMixin(Lightnin
         this.table = '';
         this.clearSchemaResults();
         this.publicationType = '';
+        this.publicationValidationError = '';
+        this.publicationDescriptionError = '';
+        this.publicationTypeError = '';
+        this.schemaError = '';
+        this.tableError = '';
+        this.isDetailsValidated = false;
         this.schedule = {
             ...this.schedule,
             frequency: '',
